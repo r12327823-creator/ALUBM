@@ -3,20 +3,21 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
-const weddingData = {
+interface AlbumData {
+  groomName: string;
+  brideName: string;
+  date: string;
+  template: string;
+  photos: string[];
+}
+
+const defaultData = {
   groomName: 'Rahul',
   brideName: 'Priya',
   date: '15th January 2026',
-  events: [
-    { name: 'Haldi', color: '#f4d03f' },
-    { name: 'Mehendi', color: '#27ae60' },
-    { name: 'Sangeet', color: '#9b59b6' },
-    { name: 'Wedding', color: '#8b2252' },
-    { name: 'Reception', color: '#c9a227' },
-  ],
+  template: 'royal',
+  photos: [] as string[],
 };
-
-const colors = ['#ff9a9e', '#a18cd1', '#84fab0', '#ffecd2', '#f093fb', '#4facfe', '#f6d365'];
 
 export default function AlbumPage() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -25,7 +26,20 @@ export default function AlbumPage() {
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const framesRef = useRef<THREE.Group[]>([]);
   const particlesRef = useRef<THREE.Points | null>(null);
-  const [currentEvent, setCurrentEvent] = useState(0);
+  const [albumData, setAlbumData] = useState<AlbumData>(defaultData);
+
+  useEffect(() => {
+    // Load from localStorage if available
+    const savedData = localStorage.getItem('weddingAlbumData');
+    if (savedData) {
+      try {
+        const data = JSON.parse(savedData);
+        setAlbumData(data);
+      } catch (e) {
+        console.log('Using default data');
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -81,16 +95,30 @@ export default function AlbumPage() {
     scene.add(particles);
     particlesRef.current = particles;
 
-    // Photo frames
-    const positions2D = [
-      [-4, 0, 0], [-1.5, 0, 1], [1.5, 0, 1], [4, 0, 0],
-      [-3, 0, -2], [0, 0, -1], [3, 0, -2]
-    ];
+    // Load photos from album data
+    const photos = albumData.photos.length > 0 ? albumData.photos : [];
+    const frameCount = Math.max(photos.length, 7);
 
+    // Calculate positions for photos in a gallery layout
+    const positions2D: [number, number, number][] = [];
+    const cols = 4;
+    const spacingX = 3.5;
+    const spacingY = 4;
+
+    for (let i = 0; i < frameCount; i++) {
+      const row = Math.floor(i / cols);
+      const col = i % cols;
+      const x = (col - (cols - 1) / 2) * spacingX;
+      const y = row * spacingY * -0.3;
+      const z = row * -1.5;
+      positions2D.push([x, y, z]);
+    }
+
+    // Create photo frames with uploaded photos
     positions2D.forEach((pos, i) => {
       const group = new THREE.Group();
       group.position.set(pos[0], pos[1], pos[2]);
-      group.rotation.y = (Math.random() - 0.5) * 0.3;
+      group.rotation.y = (Math.random() - 0.5) * 0.1;
 
       // Frame
       const frameGeom = new THREE.BoxGeometry(2.4, 3.2, 0.1);
@@ -98,12 +126,25 @@ export default function AlbumPage() {
       const frame = new THREE.Mesh(frameGeom, frameMat);
       group.add(frame);
 
-      // Photo
-      const photoGeom = new THREE.PlaneGeometry(2.2, 3);
-      const photoMat = new THREE.MeshStandardMaterial({ color: colors[i % colors.length] });
-      const photo = new THREE.Mesh(photoGeom, photoMat);
-      photo.position.z = 0.06;
-      group.add(photo);
+      // Photo - use uploaded or placeholder
+      if (photos[i]) {
+        const loader = new THREE.TextureLoader();
+        loader.load(photos[i], (texture) => {
+          const photoGeom = new THREE.PlaneGeometry(2.2, 3);
+          const photoMat = new THREE.MeshStandardMaterial({ map: texture });
+          const photoMesh = new THREE.Mesh(photoGeom, photoMat);
+          photoMesh.position.z = 0.06;
+          group.add(photoMesh);
+        });
+      } else {
+        // Placeholder colors
+        const colors = ['#ff9a9e', '#a18cd1', '#84fab0', '#ffecd2', '#f093fb', '#4facfe', '#f6d365'];
+        const photoGeom = new THREE.PlaneGeometry(2.2, 3);
+        const photoMat = new THREE.MeshStandardMaterial({ color: colors[i % colors.length] });
+        const photo = new THREE.Mesh(photoGeom, photoMat);
+        photo.position.z = 0.06;
+        group.add(photo);
+      }
 
       // Border
       const edges = new THREE.EdgesGeometry(frameGeom);
@@ -140,7 +181,7 @@ export default function AlbumPage() {
 
     const onWheel = (e: WheelEvent) => {
       camera.position.z += e.deltaY * 0.01;
-      camera.position.z = Math.max(5, Math.min(20, camera.position.z));
+      camera.position.z = Math.max(5, Math.min(25, camera.position.z));
     };
 
     // Touch controls
@@ -172,7 +213,7 @@ export default function AlbumPage() {
         );
         const delta = initialDistance - distance;
         camera.position.z += delta * 0.02;
-        camera.position.z = Math.max(5, Math.min(20, camera.position.z));
+        camera.position.z = Math.max(5, Math.min(25, camera.position.z));
         initialDistance = distance;
       }
     };
@@ -232,20 +273,20 @@ export default function AlbumPage() {
         containerRef.current.removeChild(renderer.domElement);
       }
     };
-  }, []);
+  }, [albumData]);
 
   return (
     <div className="album-page" ref={containerRef} style={{ width: '100%', height: '100%' }}>
       <div className="album-overlay">
         <h1 className="album-title">Wedding Album</h1>
         <p className="album-subtitle">
-          {weddingData.groomName} & {weddingData.brideName} - {weddingData.date}
+          {albumData.groomName} & {albumData.brideName} - {albumData.date}
         </p>
       </div>
       <div className="album-controls">
-        <button onClick={() => window.location.href = '/'}>Back</button>
-        <button>Music</button>
-        <button>Rotate</button>
+        <button onClick={() => window.location.href = '/admin'}>Create New</button>
+        <button onClick={() => window.location.href = '/'}>Home</button>
+        <button>🔊 Music</button>
       </div>
     </div>
   );
